@@ -62,18 +62,36 @@ pub use weights::*;
 
 type CurrencyOf<T: Config> = <T as pallet::Config>::Currency;
 
+
+pub mod migrations {
+
+	//
+	pub mod v1 {
+		use super::super::*;
+		use frame_support::storage_alias;
+	
+		#[storage_alias]
+		pub type Something<T: Config> = StorageValue<Pallet<T>, u128>;
+	}
+}
+
 // All pallet logic is defined in its own module and must be annotated by the `pallet` attribute.
 #[frame_support::pallet]
 pub mod pallet {
 	// Import various useful types required by all FRAME pallets.
 	use super::*;
-	use frame_support::{pallet_prelude::*, traits::{fungible, tokens::Preservation}};
+	use frame_support::{pallet_prelude::*, storage_alias, traits::{fungible, tokens::Preservation}};
 	use frame_system::pallet_prelude::*;
 	use frame_support::traits::fungible::{Inspect, Mutate};
+	use num_traits::Zero;
+
+	// your current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	// The `Pallet` struct serves as a placeholder to implement traits, methods and dispatchables
 	// (`Call`s) in this pallet.
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// The pallet's configuration trait.
@@ -96,7 +114,9 @@ pub mod pallet {
 	/// In this template, we are declaring a storage item called `Something` that stores a single
 	/// `u32` value. Learn more about runtime storage here: <https://docs.substrate.io/build/runtime-storage/>
 	#[pallet::storage]
-	pub type Something<T: Config> = StorageValue<_, T::Balance>;
+	pub type Something<T: Config> = StorageValue<_, u64>;
+
+	
 
 	/// Events that functions in this pallet can emit.
 	///
@@ -114,7 +134,7 @@ pub mod pallet {
 		/// A user has successfully set a new value.
 		SomethingStored {
 			/// The new value set.
-			something: T::Balance,
+			something: u64,
 			/// The account who set the new value.
 			who: T::AccountId,
 		},
@@ -134,6 +154,50 @@ pub mod pallet {
 		NoneValue,
 		/// There was an attempt to increment the value in storage over `u32::MAX`.
 		StorageOverflow,
+	}
+
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T: Config> {
+		pub value: u64,
+		pub _marker: PhantomData<T>,
+	}
+
+	impl<T: Config> Default for GenesisConfig<T> {
+		fn default() -> Self {
+			Self {
+				value: 0,
+				_marker: PhantomData,
+			}
+		}
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+		fn build(&self) {
+			Something::<T>::put(self.value);
+		}
+	}
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+
+		fn on_runtime_upgrade() -> Weight {
+			let current = Pallet::<T>::in_code_storage_version();
+    		let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current != onchain {
+				let original = migrations::v1::Something::<T>::get().unwrap_or(0);
+				let new_value = u64::try_from(original).unwrap_or(u64::MAX);
+				Something::<T>::put(new_value);
+			}
+			<T as pallet::Config>::WeightInfo::do_something()
+		}
+
+		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+			let value = Something::<T>::get().unwrap_or(0) + 1;
+			Something::<T>::put(value);
+			<T as pallet::Config>::WeightInfo::do_something()
+		}
 	}
 
 	/// The pallet's dispatchable functions ([`Call`]s).
@@ -157,7 +221,7 @@ pub mod pallet {
 		/// error if it isn't. Learn more about origins here: <https://docs.substrate.io/build/origins/>
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::do_something())]
-		pub fn do_something(origin: OriginFor<T>, something: T::Balance) -> DispatchResult {
+		pub fn do_something(origin: OriginFor<T>, something: u64) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
 			

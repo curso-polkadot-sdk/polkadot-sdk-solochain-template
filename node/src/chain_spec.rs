@@ -113,5 +113,8 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			"key": Some(root_key),
 		},
+		"templateModule": {
+			"value": 100,
+		},
 	})
 }

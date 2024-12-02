@@ -23,6 +23,7 @@ frame-benchmarking = { optional = true, workspace = true }
 frame-support.workspace = true
 frame-system.workspace = true
 pallet-balances.workspace = true
+num-traits = { version = "0.2.19", default-features = false }
 
 [dev-dependencies]
 sp-core = { default-features = true, workspace = true }
